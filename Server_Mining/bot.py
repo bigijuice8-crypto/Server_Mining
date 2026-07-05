@@ -142,7 +142,7 @@ def entry_keyboard():
 
 def full_menu_keyboard():
     return ReplyKeyboardMarkup([
-        [KeyboardButton("🛒 Shop")],
+        [KeyboardButton("🛒 Server Store")],
         [KeyboardButton("💰 Balance")],
         [KeyboardButton("📊 My Miners")],
         [KeyboardButton("👥 Referrals")],
