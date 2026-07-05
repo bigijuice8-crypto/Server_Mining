@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio
 import psycopg2
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
@@ -527,5 +528,6 @@ def main():
     print("✅ Connected to PostgreSQL successfully!")
     app.run_polling()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    asyncio.set_event_loop(asyncio.new_event_loop())
     main()
