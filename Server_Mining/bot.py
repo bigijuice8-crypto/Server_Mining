@@ -362,8 +362,8 @@ async def refer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "ℹ️ *About Mining Empire*\n\n"
-        "Welcome to *Mining Empire*, a virtual mining platform where you can build your own mining business and earn daily virtual income.\n\n"
+        "ℹ️ *About Server Mining*\n\n"
+        "Welcome to *Server Mining*, a online mining platform where you build your own mining business and earn daily real withdrawable income.\n\n"
 
         "🚀 *How It Works*\n"
         "• Pay the one-time ₦4,000 entry fee.\n"
