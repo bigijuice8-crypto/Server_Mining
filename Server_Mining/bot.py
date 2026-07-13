@@ -163,7 +163,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Welcome back! Use the menu below.", reply_markup=full_menu_keyboard())
     else:
         await update.message.reply_text(
-            "Welcome to Server_Mining where your success is our No.1 priority. We tend to lead you to financial freedom as your invest in the passive! 🚀\n\nPay the ₦4000 entry fee to begin.", 
+            "Welcome to Server_Mining where your success is our No.1 priority. We tend to lead you to financial freedom as your invest in the passive! 🚀\n\nPay the ₦1000 entry fee to begin.", 
             reply_markup=entry_keyboard()
         )
 
@@ -200,7 +200,7 @@ async def pay_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     c.execute(
     "INSERT INTO pending_payments (user_id, amount, payment_type) VALUES (%s, %s, %s) RETURNING id",
-    (user_id, 4000, "entry")
+    (user_id, 1000, "entry")
     )
     payment_id = c.fetchone()[0]
     
@@ -366,7 +366,7 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Welcome to *Server Mining*, a online mining platform where you build your own mining business and earn daily real withdrawable income.\n\n"
 
         "🚀 *How It Works*\n"
-        "• Pay the one-time ₦4,000 entry fee.\n"
+        "• Pay the one-time ₦1,000 entry fee.\n"
         "• Purchase mining servers from the Server Store.\n"
         "• Each miner generates daily income.\n"
         "• Claim your mining rewards every 24 hours.\n"
