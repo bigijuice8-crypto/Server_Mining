@@ -634,7 +634,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("verify", verify_payment))  # NEW
     app.add_handler(CallbackQueryHandler(paid_callback, pattern="^paid_"))
-    app.add_handler(CallbackQueryHandler(buy_callback, pattern="^💰 Buy Now"))
+    app.add_handler(CallbackQueryHandler(buy_callback, pattern=r"^buy_"))
     app.add_handler(CallbackQueryHandler(admin_callback, pattern="^(accept|reject)_"))
 
     app.add_handler(MessageHandler(filters.Regex("^(💰 Pay Entry Fee ₦1000|🛒 Server Store|💰 Balance|👥 Referrals|📊 My Miners|✋ Claim Daily|💸 Withdraw|ℹ️ About)$"), handle_menu))
