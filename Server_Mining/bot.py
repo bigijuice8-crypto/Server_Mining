@@ -197,9 +197,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Welcome back! Use the menu below.", reply_markup=full_menu_keyboard())
     else:
         await update.message.reply_text(
-            "🚀 Welcome to Server Mining!
+    """🚀 Welcome to Server Mining!
 
-Turn your investment into a growing passive income, less work needed.
+Turn your investment into a growing virtual mining empire.
 
 With Server Mining, you can:
 💰 Purchase powerful mining servers.
@@ -212,9 +212,9 @@ It only takes a one-time ₦1,000 registration fee to unlock your account and st
 
 ✨ The earlier you start, the faster you can grow.
 
-👇 Tap the button below to pay your registration fee and get started!\n\nPay the ₦1000 entry fee to begin.", 
-            reply_markup=entry_keyboard()
-        )
+👇 Tap the button below to pay your registration fee and get started!""",
+    reply_markup=entry_keyboard()
+)
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🔒 ADD THIS HERE (TOP OF FUNCTION)
