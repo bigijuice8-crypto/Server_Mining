@@ -203,7 +203,7 @@ The future of virtual mining starts here. Turn your investment into a growing pa
 
 With Server Mining, you can:
 💰 Purchase powerful mining servers.
-📈 Earn daily mining rewards.
+📈 Earn daily mining income rewards.
 🚀 Upgrade to higher-performing servers.
 👥 Earn referral bonuses by inviting friends.
 💳 Withdraw your available earnings when eligible.
