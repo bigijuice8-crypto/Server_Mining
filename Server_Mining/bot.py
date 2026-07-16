@@ -5,6 +5,8 @@ import psycopg2
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, JobQueue
+import requests
+import uuid
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -14,6 +16,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 BANK_DETAILS = os.getenv("BANK_DETAILS")
 DATABASE_URL = os.getenv("DATABASE_URL")
+PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")  # ADD THIS
 
 # Check required environment variables
 if not BOT_TOKEN:
@@ -27,6 +30,9 @@ if not ADMIN_ID:
 
 if not BANK_DETAILS:
     raise ValueError("BANK_DETAILS is missing!")
+
+if not PAYSTACK_SECRET_KEY:
+    raise ValueError("PAYSTACK_SECRET_KEY is missing!")
 
 # Convert values after checking
 ADMIN_ID = int(ADMIN_ID)
@@ -111,7 +117,8 @@ CREATE TABLE IF NOT EXISTS pending_payments (
     amount DOUBLE PRECISION,
     payment_type TEXT,
     miner_type TEXT,
-    status TEXT DEFAULT 'pending'
+    status TEXT DEFAULT 'pending',
+    reference TEXT UNIQUE
 )
 """)
 
@@ -150,6 +157,36 @@ def full_menu_keyboard():
         [KeyboardButton("💸 Withdraw")],
         [KeyboardButton("ℹ️ About")]
     ], resize_keyboard=True)
+
+# ================== PAYSTACK HELPERS ==================
+def initialize_paystack_payment(email: str, amount: int, metadata: dict = None, payment_type: str = None, miner_type: str = None):
+    url = "https://api.paystack.co/transaction/initialize"
+    headers = {
+        "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "email": email,
+        "amount": amount * 100,  # Convert to kobo
+        "reference": str(uuid.uuid4()),
+        "metadata": metadata or {}
+    }
+    response = requests.post(url, json=data, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        logging.error(f"Paystack init failed: {response.text}")
+        return None
+
+def verify_paystack_payment(reference: str):
+    url = f"https://api.paystack.co/transaction/verify/{reference}"
+    headers = {
+        "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    return None
 
 # ================== START ==================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -198,21 +235,36 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def pay_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    c.execute(
-    "INSERT INTO pending_payments (user_id, amount, payment_type) VALUES (%s, %s, %s) RETURNING id",
-    (user_id, 1000, "entry")
-    )
-    payment_id = c.fetchone()[0]
-    
-    keyboard = [[InlineKeyboardButton("✅ I've Paid", callback_data=f"paid_entry_{payment_id}")]]
-    
-    await update.message.reply_text(
-        f"Send ₦4000 to:\n{BANK_DETAILS}\n\nAfter sending, click the button below.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    user = get_user(user_id)
+    email = f"user_{user_id}@example.com"  # You can collect real email if needed
 
-# Paid button handler
+    metadata = {
+        "user_id": user_id,
+        "payment_type": "entry"
+    }
+
+    result = initialize_paystack_payment(email, 1000, metadata)  # Note: changed to 1000 as per description, update if needed
+
+    if result and result.get("status"):
+        ref = result["data"]["reference"]
+        auth_url = result["data"]["authorization_url"]
+
+        c.execute(
+            "INSERT INTO pending_payments (user_id, amount, payment_type, reference) VALUES (%s, %s, %s, %s)",
+            (user_id, 1000, "entry", ref)
+        )
+
+        await update.message.reply_text(
+            f"✅ Pay ₦1,000 Entry Fee via Paystack:\n\n"
+            f"Click the link below to pay securely:\n{auth_url}\n\n"
+            f"After payment, send /verify {ref} to confirm.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Pay Now", url=auth_url)]])
+        )
+    else:
+        await update.message.reply_text("❌ Failed to initialize payment. Try again.")
+
 async def paid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # This can be kept for legacy or removed, but kept as per instruction not to change core
     query = update.callback_query
     await query.answer()
     parts = query.data.split("_")
@@ -323,20 +375,88 @@ async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     miner_key = query.data.split("_")[1]
     miner = MINERS[miner_key]
     user_id = query.from_user.id
-    
-    c.execute(
-    "INSERT INTO pending_payments (user_id, amount, payment_type, miner_type) VALUES (%s, %s, %s, %s) RETURNING id",
-    (user_id, miner["price"], "miner", miner_key)
-    )
-    payment_id = c.fetchone()[0]
-    
-    keyboard = [[InlineKeyboardButton("✅ I've Paid", callback_data=f"paid_miner_{payment_id}")]]
-    
-    await context.bot.send_message(user_id,
-        f"Send ₦{miner['price']:,} for **{miner['name']}**\n\n{BANK_DETAILS}\n\nClick button after payment.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
+    email = f"user_{user_id}@example.com"
+
+    metadata = {
+        "user_id": user_id,
+        "payment_type": "miner",
+        "miner_type": miner_key
+    }
+
+    result = initialize_paystack_payment(email, miner["price"], metadata)
+
+    if result and result.get("status"):
+        ref = result["data"]["reference"]
+        auth_url = result["data"]["authorization_url"]
+
+        c.execute(
+            "INSERT INTO pending_payments (user_id, amount, payment_type, miner_type, reference) VALUES (%s, %s, %s, %s, %s)",
+            (user_id, miner["price"], "miner", miner_key, ref)
+        )
+
+        await context.bot.send_message(
+            user_id,
+            f"✅ Pay ₦{miner['price']:,} for **{miner['name']}** via Paystack:\n\n"
+            f"Click below:\n{auth_url}\n\n"
+            f"After successful payment, send /verify {ref}",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Pay Now", url=auth_url)]])
+        )
+    else:
+        await context.bot.send_message(user_id, "❌ Failed to initialize payment.")
+
+# New verify handler
+async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Usage: /verify <reference>")
+        return
+
+    reference = context.args[0]
+    result = verify_paystack_payment(reference)
+
+    if not result or not result.get("status") or result["data"]["status"] != "success":
+        await update.message.reply_text("❌ Payment not verified or failed.")
+        return
+
+    data = result["data"]
+    metadata = data.get("metadata", {})
+    user_id = metadata.get("user_id")
+    payment_type = metadata.get("payment_type")
+    miner_type = metadata.get("miner_type")
+
+    if not user_id:
+        await update.message.reply_text("❌ Invalid transaction metadata.")
+        return
+
+    c.execute("SELECT * FROM pending_payments WHERE reference = %s AND status = 'pending'", (reference,))
+    pending = c.fetchone()
+
+    if not pending:
+        await update.message.reply_text("✅ Payment already processed.")
+        return
+
+    amount = data["amount"] / 100
+
+    if payment_type == "entry":
+        c.execute("UPDATE users SET has_paid_entry=1 WHERE user_id=%s", (user_id,))
+        await context.bot.send_message(
+            user_id,
+            "✅ Entry fee payment successful! Full menu unlocked.",
+            reply_markup=full_menu_keyboard()
+        )
+    elif payment_type == "miner" and miner_type:
+        c.execute(
+            "INSERT INTO user_miners (user_id, miner_type, quantity) VALUES (%s, %s, %s)",
+            (user_id, miner_type, 1)
+        )
+        await context.bot.send_message(
+            user_id,
+            f"✅ {MINERS.get(miner_type, {}).get('name', 'Miner')} purchased successfully!",
+            reply_markup=full_menu_keyboard()
+        )
+
+    c.execute("UPDATE pending_payments SET status='success' WHERE reference=%s", (reference,))
+    await update.message.reply_text("✅ Payment verified and processed automatically!")
 
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -515,6 +635,7 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("verify", verify_payment))  # NEW
     app.add_handler(CallbackQueryHandler(paid_callback, pattern="^paid_"))
     app.add_handler(CallbackQueryHandler(buy_callback, pattern="^buy_"))
     app.add_handler(CallbackQueryHandler(admin_callback, pattern="^(accept|reject)_"))
@@ -526,6 +647,7 @@ def main():
     app.job_queue.run_repeating(claim_mining, interval=3600, first=60)
     
     print("✅ Connected to PostgreSQL successfully!")
+    print("✅ Paystack integrated for automated payments!")
     app.run_polling()
 
 if __name__ == "__main__":
