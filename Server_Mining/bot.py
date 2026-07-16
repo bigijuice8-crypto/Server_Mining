@@ -519,7 +519,7 @@ def main():
     app.add_handler(CallbackQueryHandler(buy_callback, pattern="^buy_"))
     app.add_handler(CallbackQueryHandler(admin_callback, pattern="^(accept|reject)_"))
 
-    app.add_handler(MessageHandler(filters.Regex("^(💰 Pay Entry Fee ₦4000|🛒 Server Store|💰 Balance|👥 Referrals|📊 My Miners|✋ Claim Daily|💸 Withdraw|ℹ️ About)$"), handle_menu))
+    app.add_handler(MessageHandler(filters.Regex("^(💰 Pay Entry Fee ₦1000|🛒 Server Store|💰 Balance|👥 Referrals|📊 My Miners|✋ Claim Daily|💸 Withdraw|ℹ️ About)$"), handle_menu))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_bank_details))
     
