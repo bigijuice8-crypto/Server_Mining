@@ -199,7 +199,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
     """🚀 Welcome to Server Mining!
 
-Turn your investment into a growing virtual mining empire.
+The future of virtual mining starts here. Turn your investment into a growing passive income stream, no much work need.
 
 With Server Mining, you can:
 💰 Purchase powerful mining servers.
