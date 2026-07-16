@@ -1,29 +1,15 @@
-name: Auto Deploy Render
+name: Trigger Render Deploy
 
 on:
   schedule:
-    - cron: "*/6 * * * *"  # Every 6 minutes
+    - cron: "*/6 * * * *"   # Every 6 minutes
   workflow_dispatch:
 
 jobs:
-  redeploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Configure Git
+      - name: Trigger Render Deploy
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-      - name: Create empty commit
-        run: |
-          git commit --allow-empty -m "Auto redeploy $(date)" || exit 0
-
-      - name: Push changes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git push
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
