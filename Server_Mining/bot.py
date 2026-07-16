@@ -14,7 +14,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
-BANK_DETAILS = os.getenv("BANK_DETAILS")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")  # ADD THIS
 
@@ -145,7 +144,7 @@ def create_user(user_id, username, referred_by=None):
     """, (user_id, username, ref_code, referred_by))
 
 def entry_keyboard():
-    return ReplyKeyboardMarkup([[KeyboardButton("💰 Pay Entry Fee ₦4000")]], resize_keyboard=True)
+    return ReplyKeyboardMarkup([[KeyboardButton("💰 Pay Entry Fee ₦1000")]], resize_keyboard=True)
 
 def full_menu_keyboard():
     return ReplyKeyboardMarkup([
