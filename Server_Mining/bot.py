@@ -14,7 +14,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
-BANK_DETAILS = os.getenv("BANK_DETAILS")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")  # ADD THIS
 
@@ -28,15 +27,13 @@ if not DATABASE_URL:
 if not ADMIN_ID:
     raise ValueError("ADMIN_ID is missing!")
 
-if not BANK_DETAILS:
-    raise ValueError("BANK_DETAILS is missing!")
+
 
 if not PAYSTACK_SECRET_KEY:
     raise ValueError("PAYSTACK_SECRET_KEY is missing!")
 
 # Convert values after checking
 ADMIN_ID = int(ADMIN_ID)
-BANK_DETAILS = BANK_DETAILS.replace("\\n", "\n")
 
 MINERS = {
     "basic": {
