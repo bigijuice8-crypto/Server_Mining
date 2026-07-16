@@ -14,6 +14,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 # ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
+BANK_DETAILS = os.getenv("BANK_DETAILS")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")  # ADD THIS
 
