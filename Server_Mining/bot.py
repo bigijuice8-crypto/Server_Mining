@@ -369,38 +369,60 @@ async def show_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    miner_key = query.data.split("_")[1]
-    miner = MINERS[miner_key]
-    user_id = query.from_user.id
-    email = f"user_{user_id}@example.com"
 
-    metadata = {
-        "user_id": user_id,
-        "payment_type": "miner",
-        "miner_type": miner_key
-    }
+    try:
+        miner_key = query.data.split("_")[1]
+        miner = MINERS[miner_key]
+        user_id = query.from_user.id
+        email = f"user_{user_id}@example.com"
 
-    result = initialize_paystack_payment(email, miner["price"], metadata)
+        metadata = {
+            "user_id": user_id,
+            "payment_type": "miner",
+            "miner_type": miner_key
+        }
 
-    if result and result.get("status"):
-        ref = result["data"]["reference"]
-        auth_url = result["data"]["authorization_url"]
-
-        c.execute(
-            "INSERT INTO pending_payments (user_id, amount, payment_type, miner_type, reference) VALUES (%s, %s, %s, %s, %s)",
-            (user_id, miner["price"], "miner", miner_key, ref)
+        result = initialize_paystack_payment(
+            email,
+            miner["price"],
+            metadata
         )
 
-        await context.bot.send_message(
-            user_id,
-            f"✅ Pay ₦{miner['price']:,} for **{miner['name']}** via Paystack:\n\n"
-            f"Click below:\n{auth_url}\n\n"
-            f"After successful payment, send /verify {ref}",
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Pay Now", url=auth_url)]])
+        print(result)
+
+        if result and result.get("status"):
+            ref = result["data"]["reference"]
+            auth_url = result["data"]["authorization_url"]
+
+            c.execute(
+                """
+                INSERT INTO pending_payments
+                (user_id, amount, payment_type, miner_type, reference)
+                VALUES (%s,%s,%s,%s,%s)
+                """,
+                (
+                    user_id,
+                    miner["price"],
+                    "miner",
+                    miner_key,
+                    ref,
+                ),
+            )
+
+            await query.message.reply_text(
+                f"Pay here:\n{auth_url}"
+            )
+
+        else:
+            await query.message.reply_text(
+                f"Paystack Error:\n{result}"
+            )
+
+    except Exception as e:
+        print(e)
+        await query.message.reply_text(
+            f"ERROR:\n{e}"
         )
-    else:
-        await context.bot.send_message(user_id, "❌ Failed to initialize payment.")
 
 # New verify handler
 async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
