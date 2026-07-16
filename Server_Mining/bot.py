@@ -199,7 +199,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
     """🚀 Welcome to Server Mining!
 
-The future of virtual mining starts here. Turn your investment into a growing passive income stream, no much work need.
+The future of virtual mining starts here. Turn your investment into a growing passive income stream, no much work needed.
 
 With Server Mining, you can:
 💰 Purchase powerful mining servers.
@@ -207,10 +207,11 @@ With Server Mining, you can:
 🚀 Upgrade to higher-performing servers.
 👥 Earn referral bonuses by inviting friends.
 💳 Withdraw your available earnings when eligible.
+💵 We are expected to generate over $1.5M in the next two years from now
 
 It only takes a one-time ₦1,000 registration fee to unlock your account and start building your mining business.
 
-✨ The earlier you start, the faster you can grow.
+✨ The earlier you start, the faster you can grow, secure your financial future
 
 👇 Tap the button below to pay your registration fee and get started!""",
     reply_markup=entry_keyboard()
