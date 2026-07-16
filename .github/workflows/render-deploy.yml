@@ -2,7 +2,7 @@ name: Trigger Render Deploy
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # Every 13 minutes
+    - cron: "*/10 * * * *"   # Every 10 minutes
   workflow_dispatch:
 
 jobs:
