@@ -226,13 +226,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # New users (never paid) get voice message + payment prompt
     if not user_data or user_data[3] == 0:
-        try:
-            await update.message.reply_voice(
-                audio=open("welcome.mp3", "rb"),
+        
+        await update.message.reply_voice(
+                voice=open("welcome.mp3", "rb"),
                 caption="🎙️ Welcome to Server Mining"
             )
-        except:
-            pass  # Voice file not found, continue anyway
+        
+             
 
         await update.message.reply_text(
     """🚀 Welcome to Server Mining!
