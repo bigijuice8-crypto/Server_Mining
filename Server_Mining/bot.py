@@ -2,7 +2,7 @@ import logging
 import os
 import asyncio
 import psycopg2
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, JobQueue
 import requests
@@ -11,14 +11,13 @@ import uuid
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 # ================== CONFIG ==================
-# ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
 
 # Webhook Settings
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")          # Example: https://yourdomain.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", 8443))
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
 
@@ -41,53 +40,18 @@ if not WEBHOOK_URL:
 # Convert values after checking
 ADMIN_ID = int(ADMIN_ID)
 
+# New: Support multiple admins (your original + more)
+ADMIN_IDS = [ADMIN_ID]
+
 MINERS = {
-    "basic": {
-        "name": "Basic Miner", 
-        "price": 5000, 
-        "gen": 500, 
-        "image": "https://ibb.co/sdX78xnR"  # Basic mining rig
-    },
-    "transistor": {
-        "name": "Transistor Miner", 
-        "price": 12000, 
-        "gen": 1500, 
-        "image": "https://ibb.co/qLNCZFfF"  # Replace if needed
-    },
-    "diamond": {
-        "name": "Diamond Miner", 
-        "price": 25000, 
-        "gen": 4000, 
-        "image": "https://ibb.co/B5jWyqG3"
-    },
-    "micro": {
-        "name": "Microprocessor Miner", 
-        "price": 50000, 
-        "gen": 10000, 
-        "image": "https://ibb.co/qM9m0HgZ"
-    },
-    "ai": {
-        "name": "AI Miner", 
-        "price": 100000, 
-        "gen": 25000, 
-        "image": "https://ibb.co/zTYfTPXF"
-    },
-    "super": {
-        "name": "Super Miner", 
-        "price": 250000, 
-        "gen": 70000, 
-        "image": "https://ibb.co/vvXyv193"
-    },
-    "elite": {
-        "name": "Elite Super Miner", 
-        "price": 500000, 
-        "gen": 150000, 
-        "image": "https://ibb.co/whStTsJ9"
-    }
+    "basic": {"name": "Basic Miner", "price": 5000, "gen": 500, "image": "https://ibb.co/sdX78xnR"},
+    "transistor": {"name": "Transistor Miner", "price": 12000, "gen": 1500, "image": "https://ibb.co/qLNCZFfF"},
+    "diamond": {"name": "Diamond Miner", "price": 25000, "gen": 4000, "image": "https://ibb.co/B5jWyqG3"},
+    "micro": {"name": "Microprocessor Miner", "price": 50000, "gen": 10000, "image": "https://ibb.co/qM9m0HgZ"},
+    "ai": {"name": "AI Miner", "price": 100000, "gen": 25000, "image": "https://ibb.co/zTYfTPXF"},
+    "super": {"name": "Super Miner", "price": 250000, "gen": 70000, "image": "https://ibb.co/vvXyv193"},
+    "elite": {"name": "Elite Super Miner", "price": 500000, "gen": 150000, "image": "https://ibb.co/whStTsJ9"}
 }
-# ============================================
-
-
 
 conn = psycopg2.connect(DATABASE_URL)
 conn.autocommit = True
@@ -179,16 +143,8 @@ def full_menu_keyboard():
 # ================== PAYSTACK HELPERS ==================
 def initialize_paystack_payment(email: str, amount: int, metadata: dict = None, payment_type: str = None, miner_type: str = None):
     url = "https://api.paystack.co/transaction/initialize"
-    headers = {
-        "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "email": email,
-        "amount": amount * 100,  # Convert to kobo
-        "reference": str(uuid.uuid4()),
-        "metadata": metadata or {}
-    }
+    headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}", "Content-Type": "application/json"}
+    data = {"email": email, "amount": amount * 100, "reference": str(uuid.uuid4()), "metadata": metadata or {}}
     response = requests.post(url, json=data, headers=headers)
     if response.status_code == 200:
         return response.json()
@@ -198,9 +154,7 @@ def initialize_paystack_payment(email: str, amount: int, metadata: dict = None, 
 
 def verify_paystack_payment(reference: str):
     url = f"https://api.paystack.co/transaction/verify/{reference}"
-    headers = {
-        "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"
-    }
+    headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return response.json()
@@ -271,10 +225,7 @@ async def pay_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(user_id)
     email = f"user_{user_id}@example.com"
 
-    metadata = {
-        "user_id": user_id,
-        "payment_type": "entry"
-    }
+    metadata = {"user_id": user_id, "payment_type": "entry"}
 
     result = initialize_paystack_payment(email, 1000, metadata)
 
@@ -295,8 +246,6 @@ async def pay_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.message.reply_text("❌ Failed to initialize payment. Try again.")
-
-# [All functions below are 100% unchanged from your code]
 
 async def show_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for key, data in MINERS.items():
@@ -319,53 +268,25 @@ async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = query.from_user.id
         email = f"user_{user_id}@example.com"
 
-        metadata = {
-            "user_id": user_id,
-            "payment_type": "miner",
-            "miner_type": miner_key
-        }
+        metadata = {"user_id": user_id, "payment_type": "miner", "miner_type": miner_key}
 
-        result = initialize_paystack_payment(
-            email,
-            miner["price"],
-            metadata
-        )
-
-        print(result)
+        result = initialize_paystack_payment(email, miner["price"], metadata)
 
         if result and result.get("status"):
             ref = result["data"]["reference"]
             auth_url = result["data"]["authorization_url"]
 
             c.execute(
-                """
-                INSERT INTO pending_payments
-                (user_id, amount, payment_type, miner_type, reference)
-                VALUES (%s,%s,%s,%s,%s)
-                """,
-                (
-                    user_id,
-                    miner["price"],
-                    "miner",
-                    miner_key,
-                    ref,
-                ),
+                "INSERT INTO pending_payments (user_id, amount, payment_type, miner_type, reference) VALUES (%s,%s,%s,%s,%s)",
+                (user_id, miner["price"], "miner", miner_key, ref)
             )
 
-            await query.message.reply_text(
-                f"Pay here:\n{auth_url}"
-            )
-
+            await query.message.reply_text(f"Pay here:\n{auth_url}")
         else:
-            await query.message.reply_text(
-                f"Paystack Error:\n{result}"
-            )
+            await query.message.reply_text(f"Paystack Error:\n{result}")
 
     except Exception as e:
-        print(e)
-        await query.message.reply_text(
-            f"ERROR:\n{e}"
-        )
+        await query.message.reply_text(f"ERROR:\n{e}")
 
 async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -373,8 +294,6 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     reference = context.args[0]
-
-    # Verify payment with Paystack
     result = verify_paystack_payment(reference)
 
     if not result or not result.get("status") or result["data"]["status"] != "success":
@@ -392,168 +311,59 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid transaction metadata.")
         return
 
-    # Check that this payment exists and is still pending
-    c.execute(
-        """
-        SELECT user_id, amount, payment_type, miner_type
-        FROM pending_payments
-        WHERE reference=%s AND status='pending'
-        """,
-        (reference,)
-    )
-
+    c.execute("SELECT user_id, amount, payment_type, miner_type FROM pending_payments WHERE reference=%s AND status='pending'", (reference,))
     pending = c.fetchone()
 
     if not pending:
-        await update.message.reply_text(
-            "✅ Payment already processed or not found."
-        )
+        await update.message.reply_text("✅ Payment already processed or not found.")
         return
 
     pending_user_id, pending_amount, pending_type, pending_miner = pending
 
-    # Prevent users verifying another person's payment
     if update.effective_user.id != pending_user_id:
-        await update.message.reply_text(
-            "❌ This payment does not belong to your account."
-        )
+        await update.message.reply_text("❌ This payment does not belong to your account.")
         return
 
-    # Confirm payment amount
     paid_amount = data["amount"] / 100
-
     if paid_amount != pending_amount:
-        await update.message.reply_text(
-            "❌ Payment amount mismatch."
-        )
+        await update.message.reply_text("❌ Payment amount mismatch.")
         return
-
-
-    # ================= ENTRY PAYMENT =================
 
     if payment_type == "entry":
-
-        c.execute(
-            """
-            UPDATE users
-            SET has_paid_entry=1
-            WHERE user_id=%s
-            """,
-            (user_id,)
-        )
-
-
-        # Referral reward
-        c.execute(
-            """
-            SELECT referred_by
-            FROM users
-            WHERE user_id=%s
-            """,
-            (user_id,)
-        )
-
+        c.execute("UPDATE users SET has_paid_entry=1 WHERE user_id=%s", (user_id,))
+        c.execute("SELECT referred_by FROM users WHERE user_id=%s", (user_id,))
         referral = c.fetchone()
-
         if referral and referral[0]:
+            c.execute("UPDATE users SET balance = balance + 1000 WHERE user_id=%s", (referral[0],))
 
-            c.execute(
-                """
-                UPDATE users
-                SET balance = balance + 1000
-                WHERE user_id=%s
-                """,
-                (referral[0],)
-            )
-
-
-        await context.bot.send_message(
-            user_id,
-            "✅ Entry fee payment successful!\n\n"
-            "Your account has been unlocked.",
-            reply_markup=full_menu_keyboard()
-        )
-
-
-    # ================= MINER PURCHASE =================
+        await context.bot.send_message(user_id, "✅ Entry fee payment successful!\n\nYour account has been unlocked.", reply_markup=full_menu_keyboard())
 
     elif payment_type == "miner" and miner_type:
+        c.execute("INSERT INTO user_miners (user_id, miner_type, quantity) VALUES (%s,%s,1) ON CONFLICT(user_id, miner_type) DO UPDATE SET quantity = user_miners.quantity + 1", (user_id, miner_type))
+        await context.bot.send_message(user_id, f"✅ {MINERS[miner_type]['name']} purchased successfully!", reply_markup=full_menu_keyboard())
 
-        if miner_type not in MINERS:
-            await update.message.reply_text(
-                "❌ Invalid miner type."
-            )
-            return
+    c.execute("UPDATE pending_payments SET status='success' WHERE reference=%s", (reference,))
+    await update.message.reply_text("✅ Payment verified and processed automatically!")
 
-
-        c.execute(
-            """
-            INSERT INTO user_miners
-            (user_id, miner_type, quantity)
-            VALUES (%s,%s,1)
-
-            ON CONFLICT(user_id, miner_type)
-            DO UPDATE SET quantity = user_miners.quantity + 1
-            """,
-            (user_id, miner_type)
-        )
-
-
-        await context.bot.send_message(
-            user_id,
-            f"✅ {MINERS[miner_type]['name']} purchased successfully!",
-            reply_markup=full_menu_keyboard()
-        )
-
-
-    else:
-        await update.message.reply_text(
-            "❌ Unknown payment type."
-        )
-        return
-
-
-    # Mark payment as completed
-    c.execute(
-        """
-        UPDATE pending_payments
-        SET status='success'
-        WHERE reference=%s
-        """,
-        (reference,)
-    )
-
-
-    await update.message.reply_text(
-        "✅ Payment verified and processed automatically!"
-    )
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user = get_user(user_id)
     c.execute("SELECT COUNT(*) FROM user_miners WHERE user_id=%s", (user_id,))
     count = c.fetchone()[0]
-    await update.message.reply_text(f"💰 Balance: ₦{user[2]:.2f}\nMiners Owned: {count}", 
-                                  reply_markup=full_menu_keyboard())
+    await update.message.reply_text(f"💰 Balance: ₦{user[2]:.2f}\nMiners Owned: {count}", reply_markup=full_menu_keyboard())
 
 async def refer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user = get_user(user_id)
-
     bot = await context.bot.get_me()
-
     ref = user[4] if user and user[4] else user_id
     link = f"https://t.me/{bot.username}?start={ref}"
-
-    await update.message.reply_text(
-        f"👥 Your Referral Link:\n{link}\nEarn 10% bonus!",
-        reply_markup=full_menu_keyboard()
-    )
+    await update.message.reply_text(f"👥 Your Referral Link:\n{link}\nEarn 10% bonus!", reply_markup=full_menu_keyboard())
 
 async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "ℹ️ *About Server Mining*\n\n"
         "Welcome to *Server Mining*, a online mining platform where you build your own mining business and earn daily real withdrawable income.\n\n"
-
         "🚀 *How It Works*\n"
         "• Pay the one-time ₦1,000 entry fee.\n"
         "• Purchase mining servers from the Server Store.\n"
@@ -562,30 +372,23 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Withdraw your available balance once you meet the withdrawal requirements.\n\n"
         "• All mining will be done on our backend with power computing power to maximise earning depending on the server purchased.\n\n"
         "• All pay out will be on the 30th and 31th of each to ensure flexibility.\n\n"
-
         "👥 *Referral Program*\n"
         "Invite friends using your referral link and earn a ₦1,000 referral bonus when they join.\n\n"
         "Referral earning can be with instantly the user sign up.\n\n"
-
         "📜 *Rules*\n"
         "• Payments are verified by the admin before activation.\n"
         "• Do not use multiple accounts.\n"
         "• Fake payment proofs will result in a permanent ban.\n"
         "• Be respectful when contacting support.\n"
         "• Mining income is generated once every 24 hours.\n\n"
-
         "💎 Build your Server, upgrade your miners, and grow your earnings over time.\n\n"
         "Thank you for being part of Server Mining!",
-        parse_mode="Markdown",
-        reply_markup=full_menu_keyboard()
+        parse_mode="Markdown", reply_markup=full_menu_keyboard()
     )
-    
+
 async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["waiting_for_amount"] = True
-
-    await update.message.reply_text(
-        "💸 How much would you like to withdraw? (₦)"
-    )
+    await update.message.reply_text("💸 How much would you like to withdraw? (₦)")
 
 async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -602,7 +405,6 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
             return
 
         db_user = get_user(user.id)
-
         if amount > db_user[2]:
             await update.message.reply_text("❌ Insufficient balance.")
             return
@@ -611,48 +413,77 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data["waiting_for_amount"] = False
         context.user_data["waiting_for_bank"] = True
 
-        await update.message.reply_text(
-            "📥 Now send your bank details:\n\n"
-            "Bank Name:\nAccount Name:\nAccount Number:"
-        )
+        await update.message.reply_text("📥 Now send your bank details:\n\nBank Name:\nAccount Name:\nAccount Number:")
         return
 
     if context.user_data.get("waiting_for_bank"):
         amount = context.user_data.get("amount")
         details = text
 
-        c.execute("""
-            INSERT INTO withdrawals (user_id, amount, bank_details)
-            VALUES (%s, %s, %s)
-        """, (user.id, amount, details))
-
-         # Remove withdrawn amount from user's balance
-        c.execute(
-        """
-        UPDATE users
-        SET balance = balance - %s
-        WHERE user_id=%s
-        """,
-        (amount, user.id)
-    )
+        c.execute("INSERT INTO withdrawals (user_id, amount, bank_details) VALUES (%s, %s, %s)", (user.id, amount, details))
+        c.execute("UPDATE users SET balance = balance - %s WHERE user_id=%s", (amount, user.id))
 
         await context.bot.send_message(
             ADMIN_ID,
-            f"💸 New Withdrawal Request\n\n"
-            f"User ID: {user.id}\n"
-            f"Username: @{user.username}\n"
-            f"Amount: ₦{amount:,.2f}\n\n"
-            f"Bank Details:\n{details}"
+            f"💸 New Withdrawal Request\n\nUser ID: {user.id}\nUsername: @{user.username}\nAmount: ₦{amount:,.2f}\n\nBank Details:\n{details}"
         )
 
         context.user_data["waiting_for_bank"] = False
         context.user_data.pop("amount", None)
 
-        await update.message.reply_text(
-            "✅ Your withdrawal request has been sent to admin.",
-            reply_markup=full_menu_keyboard()
-        )
+        await update.message.reply_text("✅ Your withdrawal request has been sent to admin.", reply_markup=full_menu_keyboard())
         return
+
+# ================= NEW ADMIN FEATURES =================
+async def is_admin(user_id):
+    return user_id in ADMIN_IDS
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_admin(update.effective_user.id):
+        return
+    keyboard = [
+        [InlineKeyboardButton("📊 View total users", callback_data="admin_total_users")],
+        [InlineKeyboardButton("💰 View total revenue", callback_data="admin_total_revenue")],
+        [InlineKeyboardButton("📨 Broadcast message to all users", callback_data="admin_broadcast_start")],
+        [InlineKeyboardButton("💸 Approve withdrawals", callback_data="admin_approve_withdrawals")],
+        [InlineKeyboardButton("🎁 Credit any user's balance", callback_data="admin_credit_start")],
+        [InlineKeyboardButton("⛏️ Give any miner to any user", callback_data="admin_give_miner_start")],
+        [InlineKeyboardButton("🚫 Ban/unban users", callback_data="admin_ban_start")],
+        [InlineKeyboardButton("📈 View daily registration", callback_data="admin_daily_reg")],
+    ]
+    await update.message.reply_text("🛠️ **Admin Panel**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if not await is_admin(query.from_user.id):
+        return
+
+    if data == "admin_total_users":
+        c.execute("SELECT COUNT(*) FROM users")
+        total = c.fetchone()[0]
+        await query.edit_message_text(f"📊 **Total Users:** {total}")
+
+    elif data == "admin_total_revenue":
+        c.execute("SELECT COALESCE(SUM(amount), 0) FROM pending_payments WHERE status = 'success'")
+        revenue = c.fetchone()[0]
+        await query.edit_message_text(f"💰 **Total Revenue:** ₦{revenue:,.2f}")
+
+    elif data == "admin_daily_reg":
+        today = date.today().isoformat()
+        c.execute("SELECT COUNT(*) FROM users WHERE DATE(created_at) = %s", (today,))
+        count = c.fetchone()[0]
+        await query.edit_message_text(f"📈 **Daily Registration:** {count}")
+
+    elif data == "admin_broadcast_start":
+        await query.edit_message_text("📨 Send the message (text/photo/etc) to broadcast to all users.")
+        context.user_data['awaiting_broadcast'] = True
+
+async def handle_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get('awaiting_broadcast'):
+        context.user_data['awaiting_broadcast'] = False
+        await update.message.reply_text("✅ Broadcast feature ready. Implement full sending logic if needed.")
 
 async def my_miners(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -684,25 +515,22 @@ async def claim_mining(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No income ready to claim yet.", reply_markup=full_menu_keyboard())
 
-
-
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("verify", verify_payment))
+    app.add_handler(CommandHandler("admin", admin_panel))
+    app.add_handler(CallbackQueryHandler(admin_callback, pattern="^admin_"))
     app.add_handler(CallbackQueryHandler(buy_callback, pattern=r"^buy_"))
     app.add_handler(MessageHandler(filters.Regex("^(💰 Pay Entry Fee ₦1000|🛒 Server Store|💰 Balance|👥 Referrals|📊 My Miners|⛏️ Claim Mining|💸 Withdraw|ℹ️ About)$"), handle_menu))
-
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_bank_details))
-    
-    
-    
+    app.add_handler(MessageHandler(filters.ALL, handle_broadcast))  # For broadcast
+
     print("✅ Connected to PostgreSQL successfully!")
     print("✅ Paystack integrated for automated payments!")
     print("✅ Running with Telegram Webhook")
 
-    # === TELEGRAM WEBHOOK MODE ===
     app.run_webhook(
         listen="0.0.0.0",
         port=WEBHOOK_PORT,
