@@ -35,6 +35,9 @@ if not ADMIN_ID:
 if not PAYSTACK_SECRET_KEY:
     raise ValueError("PAYSTACK_SECRET_KEY is missing!")
 
+if not WEBHOOK_URL:
+    raise ValueError("WEBHOOK_URL is missing!")
+
 # Convert values after checking
 ADMIN_ID = int(ADMIN_ID)
 
@@ -108,6 +111,21 @@ CREATE TABLE IF NOT EXISTS user_miners (
     quantity INTEGER DEFAULT 1,
     last_claim TIMESTAMP
 )
+""")
+
+c.execute("""
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'unique_miner'
+    ) THEN
+        ALTER TABLE user_miners
+        ADD CONSTRAINT unique_miner
+        UNIQUE(user_id, miner_type);
+    END IF;
+END $$;
 """)
 
 c.execute("""
@@ -607,6 +625,16 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
             INSERT INTO withdrawals (user_id, amount, bank_details)
             VALUES (%s, %s, %s)
         """, (user.id, amount, details))
+
+         # Remove withdrawn amount from user's balance
+        c.execute(
+        """
+        UPDATE users
+        SET balance = balance - %s
+        WHERE user_id=%s
+        """,
+        (amount, user.id)
+    )
 
         await context.bot.send_message(
             ADMIN_ID,
