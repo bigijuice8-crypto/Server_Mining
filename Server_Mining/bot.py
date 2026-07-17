@@ -153,7 +153,7 @@ def full_menu_keyboard():
         [KeyboardButton("💰 Balance")],
         [KeyboardButton("📊 My Miners")],
         [KeyboardButton("👥 Referrals")],
-        [KeyboardButton("✋ Claim Daily")],
+        [KeyboardButton("⛏️ Claim Mining")],
         [KeyboardButton("💸 Withdraw")],
         [KeyboardButton("ℹ️ About")]
     ], resize_keyboard=True)
@@ -239,8 +239,8 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await my_miners(update, context)
         elif "Referrals" in text:
             await refer(update, context)
-        elif "Claim Daily" in text:
-            await claim_daily(update, context)
+        elif "Claim Mining" in text:
+            await claim_mining(update, context)
         elif "Withdraw" in text:
             await withdraw(update, context)
         elif "About" in text:
@@ -279,97 +279,6 @@ async def pay_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Failed to initialize payment. Try again.")
 
 # [All functions below are 100% unchanged from your code]
-async def paid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    parts = query.data.split("_")
-    payment_id = int(parts[-1])
-    
-    c.execute(
-    "SELECT user_id, amount, payment_type, miner_type FROM pending_payments WHERE id=%s",
-    (payment_id,)
-    )
-    payment = c.fetchone()
-    if not payment:
-       return
-
-    user_id = payment[0]
-    amount = payment[1]
-    ptype = payment[2]
-    miner_type = payment[3]
-    
-    keyboard = [
-        [InlineKeyboardButton("✅ Accept", callback_data=f"accept_{payment_id}"),
-         InlineKeyboardButton("❌ Reject", callback_data=f"reject_{payment_id}")]
-    ]
-    
-    if ptype == "entry":
-       await context.bot.send_message(
-          ADMIN_ID,
-          f"🔔 New Entry Payment\n"
-          f"User: {user_id}\n"
-          f"Amount: ₦{amount:,.0f}",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-       )
-       await query.edit_message_text("✅ Sent to admin for approval.")
-    else:
-        miner = MINERS.get(miner_type)
-
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"🔔 Miner Purchase\n"
-            f"User: {user_id}\n"
-            f"{miner['name'] if miner else 'Unknown'}\n"
-            f"Amount: ₦{amount:,.0f}",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-    await query.edit_message_text("✅ Sent to admin.")
-
-async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if update.effective_user.id != ADMIN_ID:
-        await query.answer("Not authorized", show_alert=True)
-        return
-
-    action, pid = query.data.split("_")
-    pid = int(pid)
-    
-    c.execute("SELECT user_id, amount, payment_type, miner_type FROM pending_payments WHERE id=%s", (pid,))
-    p = c.fetchone()
-    if not p:
-        return
-    
-    user_id, amount, ptype, mtype = p
-    
-    if action == "accept":
-        if ptype == "entry":
-            c.execute("UPDATE users SET has_paid_entry=1 WHERE user_id=%s", (user_id,))
-            await context.bot.send_message(
-                user_id,
-                "✅ Entry approved! Full menu unlocked.",
-                reply_markup=full_menu_keyboard()
-            )
-        else:
-            c.execute(
-                "INSERT INTO user_miners (user_id, miner_type, quantity) VALUES (%s, %s, %s)",
-                (user_id, mtype, 1)
-            )
-            await context.bot.send_message(
-                user_id,
-                f"✅ {MINERS[mtype]['name']} added!",
-                reply_markup=full_menu_keyboard()
-            )
-
-        await query.edit_message_text("✅ Approved")
-
-    else:
-        await context.bot.send_message(user_id, "❌ Request rejected.")
-        await query.edit_message_text("❌ Rejected")
-    
-    c.execute("DELETE FROM pending_payments WHERE id=%s", (pid,))
 
 async def show_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for key, data in MINERS.items():
@@ -446,6 +355,8 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     reference = context.args[0]
+
+    # Verify payment with Paystack
     result = verify_paystack_payment(reference)
 
     if not result or not result.get("status") or result["data"]["status"] != "success":
@@ -454,6 +365,7 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = result["data"]
     metadata = data.get("metadata", {})
+
     user_id = metadata.get("user_id")
     payment_type = metadata.get("payment_type")
     miner_type = metadata.get("miner_type")
@@ -462,36 +374,141 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid transaction metadata.")
         return
 
-    c.execute("SELECT * FROM pending_payments WHERE reference = %s AND status = 'pending'", (reference,))
+    # Check that this payment exists and is still pending
+    c.execute(
+        """
+        SELECT user_id, amount, payment_type, miner_type
+        FROM pending_payments
+        WHERE reference=%s AND status='pending'
+        """,
+        (reference,)
+    )
+
     pending = c.fetchone()
 
     if not pending:
-        await update.message.reply_text("✅ Payment already processed.")
+        await update.message.reply_text(
+            "✅ Payment already processed or not found."
+        )
         return
 
-    amount = data["amount"] / 100
+    pending_user_id, pending_amount, pending_type, pending_miner = pending
+
+    # Prevent users verifying another person's payment
+    if update.effective_user.id != pending_user_id:
+        await update.message.reply_text(
+            "❌ This payment does not belong to your account."
+        )
+        return
+
+    # Confirm payment amount
+    paid_amount = data["amount"] / 100
+
+    if paid_amount != pending_amount:
+        await update.message.reply_text(
+            "❌ Payment amount mismatch."
+        )
+        return
+
+
+    # ================= ENTRY PAYMENT =================
 
     if payment_type == "entry":
-        c.execute("UPDATE users SET has_paid_entry=1 WHERE user_id=%s", (user_id,))
-        await context.bot.send_message(
-            user_id,
-            "✅ Entry fee payment successful! Full menu unlocked.",
-            reply_markup=full_menu_keyboard()
-        )
-    elif payment_type == "miner" and miner_type:
+
         c.execute(
-            "INSERT INTO user_miners (user_id, miner_type, quantity) VALUES (%s, %s, %s)",
-            (user_id, miner_type, 1)
+            """
+            UPDATE users
+            SET has_paid_entry=1
+            WHERE user_id=%s
+            """,
+            (user_id,)
         )
+
+
+        # Referral reward
+        c.execute(
+            """
+            SELECT referred_by
+            FROM users
+            WHERE user_id=%s
+            """,
+            (user_id,)
+        )
+
+        referral = c.fetchone()
+
+        if referral and referral[0]:
+
+            c.execute(
+                """
+                UPDATE users
+                SET balance = balance + 1000
+                WHERE user_id=%s
+                """,
+                (referral[0],)
+            )
+
+
         await context.bot.send_message(
             user_id,
-            f"✅ {MINERS.get(miner_type, {}).get('name', 'Miner')} purchased successfully!",
+            "✅ Entry fee payment successful!\n\n"
+            "Your account has been unlocked.",
             reply_markup=full_menu_keyboard()
         )
 
-    c.execute("UPDATE pending_payments SET status='success' WHERE reference=%s", (reference,))
-    await update.message.reply_text("✅ Payment verified and processed automatically!")
 
+    # ================= MINER PURCHASE =================
+
+    elif payment_type == "miner" and miner_type:
+
+        if miner_type not in MINERS:
+            await update.message.reply_text(
+                "❌ Invalid miner type."
+            )
+            return
+
+
+        c.execute(
+            """
+            INSERT INTO user_miners
+            (user_id, miner_type, quantity)
+            VALUES (%s,%s,1)
+
+            ON CONFLICT(user_id, miner_type)
+            DO UPDATE SET quantity = user_miners.quantity + 1
+            """,
+            (user_id, miner_type)
+        )
+
+
+        await context.bot.send_message(
+            user_id,
+            f"✅ {MINERS[miner_type]['name']} purchased successfully!",
+            reply_markup=full_menu_keyboard()
+        )
+
+
+    else:
+        await update.message.reply_text(
+            "❌ Unknown payment type."
+        )
+        return
+
+
+    # Mark payment as completed
+    c.execute(
+        """
+        UPDATE pending_payments
+        SET status='success'
+        WHERE reference=%s
+        """,
+        (reference,)
+    )
+
+
+    await update.message.reply_text(
+        "✅ Payment verified and processed automatically!"
+    )
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user = get_user(user_id)
@@ -623,7 +640,7 @@ async def my_miners(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"• {data['name']} ×{m[1]} (₦{data['gen']*m[1]:,}/day)\n"
     await update.message.reply_text(text, parse_mode='Markdown', reply_markup=full_menu_keyboard())
 
-async def claim_daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def claim_mining(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     now = datetime.now()
     total = 0
@@ -639,42 +656,19 @@ async def claim_daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No income ready to claim yet.", reply_markup=full_menu_keyboard())
 
-async def claim_mining(context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.now()
 
-    c.execute("SELECT user_id, miner_type, quantity, last_claim FROM user_miners")
-
-    for row in c.fetchall():
-        if not row[3] or (now - row[3]) >= timedelta(hours=24):
-            miner = MINERS.get(row[1])
-
-            if miner:
-                c.execute(
-                    "UPDATE users SET balance = balance + %s WHERE user_id=%s",
-                    (miner["gen"] * row[2], row[0])
-                )
-
-                c.execute(
-                    "UPDATE user_miners SET last_claim=%s WHERE user_id=%s AND miner_type=%s",
-                    (now, row[0], row[1])
-                )
-
-    conn.commit()
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("verify", verify_payment))
-    app.add_handler(CallbackQueryHandler(paid_callback, pattern="^paid_"))
     app.add_handler(CallbackQueryHandler(buy_callback, pattern=r"^buy_"))
-    app.add_handler(CallbackQueryHandler(admin_callback, pattern="^(accept|reject)_"))
-
-    app.add_handler(MessageHandler(filters.Regex("^(💰 Pay Entry Fee ₦1000|🛒 Server Store|💰 Balance|👥 Referrals|📊 My Miners|✋ Claim Daily|💸 Withdraw|ℹ️ About)$"), handle_menu))
+    app.add_handler(MessageHandler(filters.Regex("^(💰 Pay Entry Fee ₦1000|🛒 Server Store|💰 Balance|👥 Referrals|📊 My Miners|⛏️ Claim Mining|💸 Withdraw|ℹ️ About)$"), handle_menu))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_bank_details))
     
-    app.job_queue.run_repeating(claim_mining, interval=3600, first=60)
+    
     
     print("✅ Connected to PostgreSQL successfully!")
     print("✅ Paystack integrated for automated payments!")
