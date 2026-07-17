@@ -228,7 +228,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_data or user_data[3] == 0:
         
         await update.message.reply_voice(
-                voice=open("welcome.mp3", "rb"),
+                voice=open("welcome.mpeg", "rb"),
                 caption="🎙️ Welcome to Server Mining"
             )
         
