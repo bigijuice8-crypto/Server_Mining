@@ -49,9 +49,9 @@ CHANNEL_ID = int(CHANNEL_ID)
 # ================== STRUCTURED PROOFS ==================
 proofs = [
     {
-        "image": "proof1.jpeg",
+        "image": "proof11.jpeg",
         "name": "Michael A.",
-        "amount": 15000,
+        "amount": 22000,
         "bank": "GTBank"
     },
     {
