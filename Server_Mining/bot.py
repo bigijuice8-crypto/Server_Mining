@@ -49,9 +49,9 @@ CHANNEL_ID = int(CHANNEL_ID)
 # ================== STRUCTURED PROOFS ==================
 proofs = [
     {
-        "image": "proof11.jpeg",
+        "image": "proof1.jpeg",
         "name": "Michael A.",
-        "amount": 22000,
+        "amount": 15000,
         "bank": "GTBank"
     },
     {
@@ -613,18 +613,12 @@ async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Safety check - skip if no message or no text
-    if not update.message or not update.message.text:
-        return
-
     user = update.effective_user
     text = update.message.text
 
-    # 🔒 SAFETY GUARD
     if not (context.user_data.get("waiting_for_amount") or context.user_data.get("waiting_for_bank")):
         return
 
-    # STEP 1: USER IS ENTERING AMOUNT
     if context.user_data.get("waiting_for_amount"):
         try:
             amount = float(text)
@@ -648,7 +642,6 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
-    # STEP 2: USER IS ENTERING BANK DETAILS
     if context.user_data.get("waiting_for_bank"):
         amount = context.user_data.get("amount")
         details = text
@@ -658,7 +651,6 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
             VALUES (%s, %s, %s)
         """, (user.id, amount, details))
 
-        # Remove withdrawn amount from user's balance
         c.execute(
         """
         UPDATE users
@@ -666,7 +658,7 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
         WHERE user_id=%s
         """,
         (amount, user.id)
-        )
+    )
 
         await context.bot.send_message(
             ADMIN_ID,
@@ -716,60 +708,28 @@ async def claim_mining(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No income ready to claim yet.", reply_markup=full_menu_keyboard())
 
-# ================== STRUCTURED PROOFS ==================
-proofs = [
-    {
-        "image": "IMG_2955.jpg",
-        "name": "Samuel U.",
-        "amount": 10500,
-        "bank": "GTBank"
-    },
-    {
-        "image": "IMG_2956.jpg",
-        "name": "Michael A.",
-        "amount": 65000,
-        "bank": "GTBank"
-    },
-    {
-        "image": "IMG_2957.jpg",
-        "name": "Grace O.",
-        "amount": 35000,
-        "bank": "Opay"
-    }
-    # Add more here as you upload new images
-]
-
+# ================== UPDATED TESTIMONIAL FUNCTION ==================
 async def send_testimonial(context: ContextTypes.DEFAULT_TYPE):
-    if not proofs:
-        logging.warning("No proofs available!")
-        return
-
     proof = random.choice(proofs)
 
-    try:
-        caption = f"""
+    caption = f"""
 🎉 <b>Latest Withdrawal Proof</b> 🎉
 
 Another successful payout from <b>Server Mining</b>! 💰
 
-👤 Name: {proof['name']}
-💰 Amount: ₦{proof['amount']:,}
-🏦 Bank: {proof['bank']}
+
 
 💬 <i>"I've been receiving my payments without issues. Thanks Server Mining!"</i>
 
 🚀 Join today and start earning daily!
 """
 
-        await context.bot.send_photo(
-            chat_id=CHANNEL_ID,
-            photo=open(f"proofs/{proof['image']}", "rb"),
-            caption=caption,
-            parse_mode="HTML"
-        )
-        logging.info(f"Posted proof: {proof['image']}")
-    except Exception as e:
-        logging.error(f"Failed to send proof {proof['image']}: {e}")
+    await context.bot.send_photo(
+        chat_id=CHANNEL_ID,
+        photo=open(f"proofs/{proof['image']}", "rb"),
+        caption=caption,
+        parse_mode="HTML"
+    )
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
