@@ -716,11 +716,38 @@ async def claim_mining(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No income ready to claim yet.", reply_markup=full_menu_keyboard())
 
-# ================== UPDATED TESTIMONIAL FUNCTION ==================
+# ================== STRUCTURED PROOFS ==================
+proofs = [
+    {
+        "image": "IMG_2955.jpg",
+        "name": "Samuel U.",
+        "amount": 10500,
+        "bank": "GTBank"
+    },
+    {
+        "image": "IMG_2956.jpg",
+        "name": "Michael A.",
+        "amount": 65000,
+        "bank": "GTBank"
+    },
+    {
+        "image": "IMG_2957.jpg",
+        "name": "Grace O.",
+        "amount": 35000,
+        "bank": "Opay"
+    }
+    # Add more here as you upload new images
+]
+
 async def send_testimonial(context: ContextTypes.DEFAULT_TYPE):
+    if not proofs:
+        logging.warning("No proofs available!")
+        return
+
     proof = random.choice(proofs)
 
-    caption = f"""
+    try:
+        caption = f"""
 🎉 <b>Latest Withdrawal Proof</b> 🎉
 
 Another successful payout from <b>Server Mining</b>! 💰
@@ -734,12 +761,15 @@ Another successful payout from <b>Server Mining</b>! 💰
 🚀 Join today and start earning daily!
 """
 
-    await context.bot.send_photo(
-        chat_id=CHANNEL_ID,
-        photo=open(f"proofs/{proof['image']}", "rb"),
-        caption=caption,
-        parse_mode="HTML"
-    )
+        await context.bot.send_photo(
+            chat_id=CHANNEL_ID,
+            photo=open(f"proofs/{proof['image']}", "rb"),
+            caption=caption,
+            parse_mode="HTML"
+        )
+        logging.info(f"Posted proof: {proof['image']}")
+    except Exception as e:
+        logging.error(f"Failed to send proof {proof['image']}: {e}")
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
