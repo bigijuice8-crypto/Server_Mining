@@ -613,12 +613,18 @@ async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Safety check - skip if no message or no text
+    if not update.message or not update.message.text:
+        return
+
     user = update.effective_user
     text = update.message.text
 
+    # 🔒 SAFETY GUARD
     if not (context.user_data.get("waiting_for_amount") or context.user_data.get("waiting_for_bank")):
         return
 
+    # STEP 1: USER IS ENTERING AMOUNT
     if context.user_data.get("waiting_for_amount"):
         try:
             amount = float(text)
@@ -642,6 +648,7 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
+    # STEP 2: USER IS ENTERING BANK DETAILS
     if context.user_data.get("waiting_for_bank"):
         amount = context.user_data.get("amount")
         details = text
@@ -651,6 +658,7 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
             VALUES (%s, %s, %s)
         """, (user.id, amount, details))
 
+        # Remove withdrawn amount from user's balance
         c.execute(
         """
         UPDATE users
@@ -658,7 +666,7 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
         WHERE user_id=%s
         """,
         (amount, user.id)
-    )
+        )
 
         await context.bot.send_message(
             ADMIN_ID,
