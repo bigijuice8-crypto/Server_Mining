@@ -710,6 +710,60 @@ async def claim_mining(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No income ready to claim yet.", reply_markup=full_menu_keyboard())
 
 
+async def send_testimonial(context: ContextTypes.DEFAULT_TYPE):
+    amounts = [5000, 10000, 15000, 25000, 35000, 50000]
+
+    names = [
+        "Michael A.",
+        "John E.",
+        "Grace O.",
+        "David C.",
+        "Blessing N.",
+        "Samuel U."
+    ]
+
+    banks = [
+        "GTBank",
+        "Access Bank",
+        "Opay",
+        "PalmPay",
+        "UBA",
+        "First Bank"
+    ]
+
+    amount = random.choice(amounts)
+    name = random.choice(names)
+    bank = random.choice(banks)
+
+    caption = f"""
+🎉 <b>Latest Withdrawal Proof</b> 🎉
+
+Another successful payout from <b>Server Mining</b>! 💰
+
+👤 Name: {name}
+💰 Amount: ₦{amount:,}
+🏦 Bank: {bank}
+
+💬 <i>"I've been receiving my payments without issues. Thanks Server Mining!"</i>
+
+🚀 Join today and start earning daily!
+"""
+
+    proofs = os.listdir("proofs")
+
+    if not proofs:
+        return
+
+    image = random.choice(proofs)
+
+    await context.bot.send_photo(
+        chat_id=CHANNEL_ID,
+        photo=open(f"proofs/{image}", "rb"),
+        caption=caption,
+        parse_mode="HTML"
+    )
+
+
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
@@ -726,6 +780,12 @@ def main():
     print("✅ Connected to PostgreSQL successfully!")
     print("✅ Paystack integrated for automated payments!")
     print("✅ Running with Telegram Webhook")
+
+    app.job_queue.run_repeating(
+    send_testimonial,
+    interval=172800,   # Every 48 hours
+    first=30          # First post 30 seconds after the bot starts
+    )
 
     # === TELEGRAM WEBHOOK MODE ===
     app.run_webhook(
