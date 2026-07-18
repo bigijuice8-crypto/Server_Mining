@@ -16,6 +16,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
+CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 # Webhook Settings
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")          # Example: https://yourdomain.com
@@ -38,8 +39,12 @@ if not PAYSTACK_SECRET_KEY:
 if not WEBHOOK_URL:
     raise ValueError("WEBHOOK_URL is missing!")
 
+if not CHANNEL_ID:
+    raise ValueError("CHANNEL_ID is missing!")
+
 # Convert values after checking
 ADMIN_ID = int(ADMIN_ID)
+CHANNEL_ID = int(CHANNEL_ID)
 
 MINERS = {
     "basic": {
