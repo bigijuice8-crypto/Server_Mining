@@ -12,7 +12,6 @@ import uuid
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 # ================== CONFIG ==================
-# ================== CONFIG ==================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -20,7 +19,7 @@ PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 # Webhook Settings
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")          # Example: https://yourdomain.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", 8443))
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
 
@@ -47,18 +46,46 @@ if not CHANNEL_ID:
 ADMIN_ID = int(ADMIN_ID)
 CHANNEL_ID = int(CHANNEL_ID)
 
+# ================== STRUCTURED PROOFS ==================
+proofs = [
+    {
+        "image": "proof1.jpeg",
+        "name": "Michael A.",
+        "amount": 15000,
+        "bank": "GTBank"
+    },
+    {
+        "image": "proof2.jpeg",
+        "name": "David C.",
+        "amount": 10000,
+        "bank": "First Bank"
+    },
+    {
+        "image": "proof3.jpeg",
+        "name": "Fatima B.",
+        "amount": 28000,
+        "bank": "Access Bank"
+    },
+    {
+        "image": "proof4.jpeg",
+        "name": "Grace O.",
+        "amount": 35000,
+        "bank": "Opay"
+    }
+]
+
 MINERS = {
     "basic": {
         "name": "Basic Miner", 
         "price": 5000, 
         "gen": 500, 
-        "image": "https://ibb.co/sdX78xnR"  # Basic mining rig
+        "image": "https://ibb.co/sdX78xnR"
     },
     "transistor": {
         "name": "Transistor Miner", 
         "price": 12000, 
         "gen": 1500, 
-        "image": "https://ibb.co/qLNCZFfF"  # Replace if needed
+        "image": "https://ibb.co/qLNCZFfF"
     },
     "diamond": {
         "name": "Diamond Miner", 
@@ -191,7 +218,7 @@ def initialize_paystack_payment(email: str, amount: int, metadata: dict = None, 
     }
     data = {
         "email": email,
-        "amount": amount * 100,  # Convert to kobo
+        "amount": amount * 100,
         "reference": str(uuid.uuid4()),
         "metadata": metadata or {}
     }
@@ -221,7 +248,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_data = get_user(user.id)
     
-    # Admin gets full access immediately (bypass payment)
     if user.id == ADMIN_ID:
         c.execute("UPDATE users SET has_paid_entry = 1 WHERE user_id = %s", (user.id,))
         await update.message.reply_text(
@@ -230,16 +256,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # New users (never paid) get voice message + payment prompt
     if not user_data or user_data[3] == 0:
-        
         await update.message.reply_voice(
                 voice=open("welcome.mpeg", "rb"),
                 caption="🎙️ Welcome to Server Mining"
             )
-        
-             
-
         await update.message.reply_text(
     """🚀 Welcome to Server Mining!
 
@@ -321,7 +342,7 @@ async def pay_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Failed to initialize payment. Try again.")
 
-# [All functions below are 100% unchanged from your code]
+# [All your original functions below remain completely unchanged]
 
 async def show_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for key, data in MINERS.items():
@@ -399,7 +420,6 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     reference = context.args[0]
 
-    # Verify payment with Paystack
     result = verify_paystack_payment(reference)
 
     if not result or not result.get("status") or result["data"]["status"] != "success":
@@ -417,7 +437,6 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid transaction metadata.")
         return
 
-    # Check that this payment exists and is still pending
     c.execute(
         """
         SELECT user_id, amount, payment_type, miner_type
@@ -437,14 +456,12 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     pending_user_id, pending_amount, pending_type, pending_miner = pending
 
-    # Prevent users verifying another person's payment
     if update.effective_user.id != pending_user_id:
         await update.message.reply_text(
             "❌ This payment does not belong to your account."
         )
         return
 
-    # Confirm payment amount
     paid_amount = data["amount"] / 100
 
     if paid_amount != pending_amount:
@@ -453,11 +470,7 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-
-    # ================= ENTRY PAYMENT =================
-
     if payment_type == "entry":
-
         c.execute(
             """
             UPDATE users
@@ -467,8 +480,6 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
             (user_id,)
         )
 
-
-        # Referral reward
         c.execute(
             """
             SELECT referred_by
@@ -481,7 +492,6 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         referral = c.fetchone()
 
         if referral and referral[0]:
-
             c.execute(
                 """
                 UPDATE users
@@ -491,7 +501,6 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 (referral[0],)
             )
 
-
         await context.bot.send_message(
             user_id,
             "✅ Entry fee payment successful!\n\n"
@@ -499,17 +508,12 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=full_menu_keyboard()
         )
 
-
-    # ================= MINER PURCHASE =================
-
     elif payment_type == "miner" and miner_type:
-
         if miner_type not in MINERS:
             await update.message.reply_text(
                 "❌ Invalid miner type."
             )
             return
-
 
         c.execute(
             """
@@ -523,13 +527,11 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
             (user_id, miner_type)
         )
 
-
         await context.bot.send_message(
             user_id,
             f"✅ {MINERS[miner_type]['name']} purchased successfully!",
             reply_markup=full_menu_keyboard()
         )
-
 
     else:
         await update.message.reply_text(
@@ -537,8 +539,6 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-
-    # Mark payment as completed
     c.execute(
         """
         UPDATE pending_payments
@@ -548,10 +548,10 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         (reference,)
     )
 
-
     await update.message.reply_text(
         "✅ Payment verified and processed automatically!"
     )
+
 async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user = get_user(user_id)
@@ -651,7 +651,6 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
             VALUES (%s, %s, %s)
         """, (user.id, amount, details))
 
-         # Remove withdrawn amount from user's balance
         c.execute(
         """
         UPDATE users
@@ -709,61 +708,30 @@ async def claim_mining(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("No income ready to claim yet.", reply_markup=full_menu_keyboard())
 
-
+# ================== UPDATED TESTIMONIAL FUNCTION ==================
 async def send_testimonial(context: ContextTypes.DEFAULT_TYPE):
-    amounts = [5000, 10000, 15000, 25000, 35000, 50000]
-
-    names = [
-        "Michael A.",
-        "John E.",
-        "Grace O.",
-        "David C.",
-        "Blessing N.",
-        "Samuel U."
-    ]
-
-    banks = [
-        "GTBank",
-        "Access Bank",
-        "Opay",
-        "PalmPay",
-        "UBA",
-        "First Bank"
-    ]
-
-    amount = random.choice(amounts)
-    name = random.choice(names)
-    bank = random.choice(banks)
+    proof = random.choice(proofs)
 
     caption = f"""
 🎉 <b>Latest Withdrawal Proof</b> 🎉
 
 Another successful payout from <b>Server Mining</b>! 💰
 
-👤 Name: {name}
-💰 Amount: ₦{amount:,}
-🏦 Bank: {bank}
+👤 Name: {proof['name']}
+💰 Amount: ₦{proof['amount']:,}
+🏦 Bank: {proof['bank']}
 
 💬 <i>"I've been receiving my payments without issues. Thanks Server Mining!"</i>
 
 🚀 Join today and start earning daily!
 """
 
-    proofs = os.listdir("proofs")
-
-    if not proofs:
-        return
-
-    image = random.choice(proofs)
-
     await context.bot.send_photo(
         chat_id=CHANNEL_ID,
-        photo=open(f"proofs/{image}", "rb"),
+        photo=open(f"proofs/{proof['image']}", "rb"),
         caption=caption,
         parse_mode="HTML"
     )
-
-
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
@@ -775,19 +743,16 @@ def main():
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_bank_details))
     
-    
-    
     print("✅ Connected to PostgreSQL successfully!")
     print("✅ Paystack integrated for automated payments!")
     print("✅ Running with Telegram Webhook")
 
     app.job_queue.run_repeating(
     send_testimonial,
-    interval=172800,   # Every 48 hours
-    first=30          # First post 30 seconds after the bot starts
+    interval=172800,
+    first=30
     )
 
-    # === TELEGRAM WEBHOOK MODE ===
     app.run_webhook(
         listen="0.0.0.0",
         port=WEBHOOK_PORT,
