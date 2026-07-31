@@ -79,43 +79,50 @@ MINERS = {
         "name": "Basic Miner", 
         "price": 5000, 
         "gen": 500, 
-        "image": "https://ibb.co/sdX78xnR"
+        "image": "https://ibb.co/sdX78xnR",
+        "days": 30
     },
     "transistor": {
         "name": "Transistor Miner", 
         "price": 12000, 
         "gen": 1500, 
-        "image": "https://ibb.co/qLNCZFfF"
+        "image": "https://ibb.co/qLNCZFfF",
+        "days": 45
     },
     "diamond": {
         "name": "Diamond Miner", 
         "price": 25000, 
         "gen": 4000, 
-        "image": "https://ibb.co/B5jWyqG3"
+        "image": "https://ibb.co/B5jWyqG3",
+        "days": 60
     },
     "micro": {
         "name": "Microprocessor Miner", 
         "price": 50000, 
         "gen": 10000, 
-        "image": "https://ibb.co/qM9m0HgZ"
+        "image": "https://ibb.co/qM9m0HgZ",
+        "days": 90
     },
     "ai": {
         "name": "AI Miner", 
         "price": 100000, 
         "gen": 25000, 
-        "image": "https://ibb.co/zTYfTPXF"
+        "image": "https://ibb.co/zTYfTPXF",
+        "days": 120
     },
     "super": {
         "name": "Super Miner", 
         "price": 250000, 
         "gen": 70000, 
-        "image": "https://ibb.co/vvXyv193"
+        "image": "https://ibb.co/vvXyv193",
+        "days": 150
     },
     "elite": {
         "name": "Elite Super Miner", 
         "price": 500000, 
         "gen": 150000, 
-        "image": "https://ibb.co/whStTsJ9"
+        "image": "https://ibb.co/whStTsJ9",
+        "days": 180
     }
 }
 # ============================================
@@ -142,7 +149,8 @@ CREATE TABLE IF NOT EXISTS user_miners (
     user_id BIGINT,
     miner_type TEXT,
     quantity INTEGER DEFAULT 1,
-    last_claim TIMESTAMP
+    last_claim TIMESTAMP,
+    expiry_date TIMESTAMP
 )
 """)
 
@@ -157,6 +165,19 @@ BEGIN
         ALTER TABLE user_miners
         ADD CONSTRAINT unique_miner
         UNIQUE(user_id, miner_type);
+    END IF;
+END $$;
+""")
+
+# Add expiry_date column if it doesn't exist (for existing databases)
+c.execute("""
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name='user_miners' AND column_name='expiry_date'
+    ) THEN
+        ALTER TABLE user_miners ADD COLUMN expiry_date TIMESTAMP;
     END IF;
 END $$;
 """)
@@ -209,6 +230,14 @@ def full_menu_keyboard():
         [KeyboardButton("ℹ️ About")]
     ], resize_keyboard=True)
 
+def admin_keyboard():
+    return ReplyKeyboardMarkup([
+        [KeyboardButton("📊 Admin Stats"), KeyboardButton("💸 Pending Withdrawals")],
+        [KeyboardButton("👥 All Users"), KeyboardButton("🔓 Unlock User")],
+        [KeyboardButton("📢 Broadcast"), KeyboardButton("💳 Pending Payments")],
+        [KeyboardButton("⬅️ Back to User Menu")]
+    ], resize_keyboard=True)
+
 # ================== PAYSTACK HELPERS ==================
 def initialize_paystack_payment(email: str, amount: int, metadata: dict = None, payment_type: str = None, miner_type: str = None):
     url = "https://api.paystack.co/transaction/initialize"
@@ -251,7 +280,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user.id == ADMIN_ID:
         c.execute("UPDATE users SET has_paid_entry = 1 WHERE user_id = %s", (user.id,))
         await update.message.reply_text(
-            "👑 Welcome Admin!\nYou have full access.", 
+            "👑 Welcome Admin!\nYou have full access.\n\nUse /admin to open the Admin Panel.", 
             reply_markup=full_menu_keyboard()
         )
         return
@@ -285,12 +314,38 @@ It only takes a one-time ₦1,000 registration fee to unlock your account and st
         await update.message.reply_text("Welcome back! Use the menu below.", reply_markup=full_menu_keyboard())
 
 async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get("waiting_for_amount") or context.user_data.get("waiting_for_bank"):
+    if context.user_data.get("waiting_for_amount") or context.user_data.get("waiting_for_bank") or context.user_data.get("waiting_for_broadcast") or context.user_data.get("waiting_for_unlock"):
         return
 
     text = update.message.text
     user_id = update.effective_user.id
     user = get_user(user_id)
+
+    # Admin menu buttons
+    if user_id == ADMIN_ID:
+        if text == "📊 Admin Stats":
+            await admin_stats(update, context)
+            return
+        elif text == "💸 Pending Withdrawals":
+            await admin_pending_withdrawals(update, context)
+            return
+        elif text == "👥 All Users":
+            await admin_all_users(update, context)
+            return
+        elif text == "🔓 Unlock User":
+            context.user_data["waiting_for_unlock"] = True
+            await update.message.reply_text("Send the User ID you want to unlock:")
+            return
+        elif text == "📢 Broadcast":
+            context.user_data["waiting_for_broadcast"] = True
+            await update.message.reply_text("Send the message you want to broadcast to all users:")
+            return
+        elif text == "💳 Pending Payments":
+            await admin_pending_payments(update, context)
+            return
+        elif text == "⬅️ Back to User Menu":
+            await update.message.reply_text("Back to normal menu.", reply_markup=full_menu_keyboard())
+            return
 
     if "Pay Entry" in text:
         await pay_entry(update, context)
@@ -350,7 +405,7 @@ async def show_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
             photo=data["image"],
-            caption=f"**{data['name']}**\n💰 Price: ₦{data['price']:,}\n📈 Daily Income: ₦{data['gen']:,}",
+            caption=f"**{data['name']}**\n💰 Price: ₦{data['price']:,}\n📈 Daily Income: ₦{data['gen']:,}\n⏳ Duration: {data['days']} days",
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -515,21 +570,28 @@ async def verify_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # Calculate expiry date based on miner cycle
+        days = MINERS[miner_type]["days"]
+        expiry = datetime.now() + timedelta(days=days)
+
         c.execute(
             """
             INSERT INTO user_miners
-            (user_id, miner_type, quantity)
-            VALUES (%s,%s,1)
+            (user_id, miner_type, quantity, expiry_date)
+            VALUES (%s,%s,1,%s)
 
             ON CONFLICT(user_id, miner_type)
-            DO UPDATE SET quantity = user_miners.quantity + 1
+            DO UPDATE SET 
+                quantity = user_miners.quantity + 1,
+                expiry_date = GREATEST(user_miners.expiry_date, EXCLUDED.expiry_date)
             """,
-            (user_id, miner_type)
+            (user_id, miner_type, expiry)
         )
 
         await context.bot.send_message(
             user_id,
-            f"✅ {MINERS[miner_type]['name']} purchased successfully!",
+            f"✅ {MINERS[miner_type]['name']} purchased successfully!\n"
+            f"⏳ Active for {days} days (until {expiry.strftime('%Y-%m-%d')})",
             reply_markup=full_menu_keyboard()
         )
 
@@ -616,6 +678,41 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
     user = update.effective_user
     text = update.message.text
 
+    # Admin broadcast handler
+    if context.user_data.get("waiting_for_broadcast") and user.id == ADMIN_ID:
+        context.user_data["waiting_for_broadcast"] = False
+        message = text
+        c.execute("SELECT user_id FROM users WHERE has_paid_entry = 1")
+        users = c.fetchall()
+        success = 0
+        fail = 0
+        for u in users:
+            try:
+                await context.bot.send_message(u[0], f"📢 Admin Broadcast:\n\n{message}")
+                success += 1
+            except:
+                fail += 1
+        await update.message.reply_text(
+            f"✅ Broadcast completed!\nSent: {success}\nFailed: {fail}",
+            reply_markup=admin_keyboard()
+        )
+        return
+
+    # Admin unlock user handler
+    if context.user_data.get("waiting_for_unlock") and user.id == ADMIN_ID:
+        context.user_data["waiting_for_unlock"] = False
+        try:
+            target_id = int(text.strip())
+            c.execute("UPDATE users SET has_paid_entry = 1 WHERE user_id = %s", (target_id,))
+            await update.message.reply_text(f"✅ User {target_id} has been unlocked.", reply_markup=admin_keyboard())
+            try:
+                await context.bot.send_message(target_id, "🎉 Your account has been unlocked by admin!")
+            except:
+                pass
+        except:
+            await update.message.reply_text("❌ Invalid User ID.", reply_markup=admin_keyboard())
+        return
+
     if not (context.user_data.get("waiting_for_amount") or context.user_data.get("waiting_for_bank")):
         return
 
@@ -680,33 +777,190 @@ async def receive_bank_details(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def my_miners(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    c.execute("SELECT miner_type, quantity FROM user_miners WHERE user_id=%s", (user_id,))
+    c.execute("SELECT miner_type, quantity, expiry_date FROM user_miners WHERE user_id=%s", (user_id,))
     miners = c.fetchall()
     if not miners:
         await update.message.reply_text("You have no miners yet.")
         return
     text = "🖥️ **Your Miners**\n\n"
+    now = datetime.now()
     for m in miners:
         data = MINERS.get(m[0])
         if data:
-            text += f"• {data['name']} ×{m[1]} (₦{data['gen']*m[1]:,}/day)\n"
+            expiry = m[2]
+            if expiry and expiry < now:
+                status = "❌ Expired"
+            else:
+                days_left = (expiry - now).days if expiry else "?"
+                status = f"✅ Active ({days_left} days left)"
+            text += f"• {data['name']} ×{m[1]} (₦{data['gen']*m[1]:,}/day)\n  {status}\n\n"
     await update.message.reply_text(text, parse_mode='Markdown', reply_markup=full_menu_keyboard())
 
 async def claim_mining(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     now = datetime.now()
     total = 0
-    c.execute("SELECT miner_type, quantity, last_claim FROM user_miners WHERE user_id=%s", (user_id,))
+    c.execute("SELECT miner_type, quantity, last_claim, expiry_date FROM user_miners WHERE user_id=%s", (user_id,))
     for m in c.fetchall():
         miner = MINERS.get(m[0])
-        if miner and (not m[2] or (now - m[2]) >= timedelta(hours=24)):
+        if not miner:
+            continue
+
+        # Check if miner has expired
+        if m[3] and m[3] < now:
+            # Remove expired miner
+            c.execute("DELETE FROM user_miners WHERE user_id=%s AND miner_type=%s", (user_id, m[0]))
+            continue
+
+        if not m[2] or (now - m[2]) >= timedelta(hours=24):
             total += miner["gen"] * m[1]
             c.execute("UPDATE user_miners SET last_claim=%s WHERE user_id=%s AND miner_type=%s", (now, user_id, m[0]))
     if total > 0:
         c.execute("UPDATE users SET balance = balance + %s WHERE user_id=%s", (total, user_id))
         await update.message.reply_text(f"✅ Claimed ₦{total:,} successfully!", reply_markup=full_menu_keyboard())
     else:
-        await update.message.reply_text("No income ready to claim yet.", reply_markup=full_menu_keyboard())
+        await update.message.reply_text("No income ready to claim yet (or all miners expired).", reply_markup=full_menu_keyboard())
+
+# ================== ADMIN PANEL ==================
+async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("❌ You are not authorized.")
+        return
+    await update.message.reply_text(
+        "👑 **Admin Panel**\n\nSelect an option below:",
+        parse_mode="Markdown",
+        reply_markup=admin_keyboard()
+    )
+
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    c.execute("SELECT COUNT(*) FROM users")
+    total_users = c.fetchone()[0]
+
+    c.execute("SELECT COUNT(*) FROM users WHERE has_paid_entry = 1")
+    paid_users = c.fetchone()[0]
+
+    c.execute("SELECT COALESCE(SUM(balance), 0) FROM users")
+    total_balance = c.fetchone()[0]
+
+    c.execute("SELECT COUNT(*) FROM user_miners")
+    total_miners = c.fetchone()[0]
+
+    c.execute("SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'")
+    pending_w = c.fetchone()[0]
+
+    c.execute("SELECT COUNT(*) FROM pending_payments WHERE status = 'pending'")
+    pending_p = c.fetchone()[0]
+
+    text = f"""📊 **Admin Statistics**
+
+👥 Total Users: {total_users}
+✅ Paid Users: {paid_users}
+💰 Total Balance in System: ₦{total_balance:,.2f}
+🖥️ Active Miners: {total_miners}
+💸 Pending Withdrawals: {pending_w}
+💳 Pending Payments: {pending_p}
+"""
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=admin_keyboard())
+
+async def admin_pending_withdrawals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    c.execute("SELECT id, user_id, amount, bank_details FROM withdrawals WHERE status = 'pending' ORDER BY id DESC LIMIT 20")
+    rows = c.fetchall()
+
+    if not rows:
+        await update.message.reply_text("No pending withdrawals.", reply_markup=admin_keyboard())
+        return
+
+    for row in rows:
+        wid, uid, amount, details = row
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Approve", callback_data=f"wapprove_{wid}"),
+                InlineKeyboardButton("❌ Reject", callback_data=f"wreject_{wid}")
+            ]
+        ]
+        await update.message.reply_text(
+            f"💸 Withdrawal #{wid}\n"
+            f"User ID: {uid}\n"
+            f"Amount: ₦{amount:,.2f}\n"
+            f"Details:\n{details}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+async def admin_all_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    c.execute("SELECT user_id, username, balance, has_paid_entry FROM users ORDER BY balance DESC LIMIT 30")
+    rows = c.fetchall()
+
+    text = "👥 **Top Users (by balance)**\n\n"
+    for r in rows:
+        status = "✅" if r[3] == 1 else "❌"
+        text += f"{status} `{r[0]}` | @{r[1] or 'N/A'} | ₦{r[2]:,.2f}\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=admin_keyboard())
+
+async def admin_pending_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    c.execute("SELECT id, user_id, amount, payment_type, miner_type, reference FROM pending_payments WHERE status = 'pending' ORDER BY id DESC LIMIT 15")
+    rows = c.fetchall()
+
+    if not rows:
+        await update.message.reply_text("No pending payments.", reply_markup=admin_keyboard())
+        return
+
+    text = "💳 **Pending Payments**\n\n"
+    for r in rows:
+        text += f"ID: {r[0]} | User: {r[1]}\n₦{r[2]:,.0f} | {r[3]} | {r[4] or '-'}\nRef: `{r[5]}`\n\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=admin_keyboard())
+
+async def admin_withdrawal_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.from_user.id != ADMIN_ID:
+        await query.edit_message_text("❌ Not authorized.")
+        return
+
+    data = query.data
+    if data.startswith("wapprove_"):
+        wid = int(data.split("_")[1])
+        c.execute("UPDATE withdrawals SET status = 'approved' WHERE id = %s RETURNING user_id, amount", (wid,))
+        result = c.fetchone()
+        if result:
+            await query.edit_message_text(f"✅ Withdrawal #{wid} approved.")
+            try:
+                await context.bot.send_message(result[0], f"✅ Your withdrawal of ₦{result[1]:,.2f} has been approved and will be paid soon.")
+            except:
+                pass
+        else:
+            await query.edit_message_text("Withdrawal not found.")
+
+    elif data.startswith("wreject_"):
+        wid = int(data.split("_")[1])
+        c.execute("SELECT user_id, amount FROM withdrawals WHERE id = %s AND status = 'pending'", (wid,))
+        result = c.fetchone()
+        if result:
+            uid, amount = result
+            # Refund the balance
+            c.execute("UPDATE users SET balance = balance + %s WHERE user_id = %s", (amount, uid))
+            c.execute("UPDATE withdrawals SET status = 'rejected' WHERE id = %s", (wid,))
+            await query.edit_message_text(f"❌ Withdrawal #{wid} rejected. Balance refunded.")
+            try:
+                await context.bot.send_message(uid, f"❌ Your withdrawal of ₦{amount:,.2f} was rejected. The amount has been returned to your balance.")
+            except:
+                pass
+        else:
+            await query.edit_message_text("Withdrawal not found or already processed.")
 
 # ================== UPDATED TESTIMONIAL FUNCTION ==================
 async def send_testimonial(context: ContextTypes.DEFAULT_TYPE):
@@ -736,14 +990,17 @@ def main():
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("verify", verify_payment))
+    app.add_handler(CommandHandler("admin", admin_command))
     app.add_handler(CallbackQueryHandler(buy_callback, pattern=r"^buy_"))
-    app.add_handler(MessageHandler(filters.Regex("^(💰 Pay Entry Fee ₦1000|🛒 Server Store|💰 Balance|👥 Referrals|📊 My Miners|⛏️ Claim Mining|💸 Withdraw|ℹ️ About)$"), handle_menu))
+    app.add_handler(CallbackQueryHandler(admin_withdrawal_callback, pattern=r"^w(approve|reject)_"))
+    app.add_handler(MessageHandler(filters.Regex("^(💰 Pay Entry Fee ₦1000|🛒 Server Store|💰 Balance|👥 Referrals|📊 My Miners|⛏️ Claim Mining|💸 Withdraw|ℹ️ About|📊 Admin Stats|💸 Pending Withdrawals|👥 All Users|🔓 Unlock User|📢 Broadcast|💳 Pending Payments|⬅️ Back to User Menu)$"), handle_menu))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_bank_details))
     
     print("✅ Connected to PostgreSQL successfully!")
     print("✅ Paystack integrated for automated payments!")
     print("✅ Running with Telegram Webhook")
+    print("✅ Admin Panel + Miner Cycles enabled!")
 
     app.job_queue.run_repeating(
     send_testimonial,
