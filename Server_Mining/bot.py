@@ -321,29 +321,29 @@ async def handle_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user = get_user(user_id)
 
-    # Admin menu buttons
+    # Admin menu buttons (robust matching with "in")
     if user_id == ADMIN_ID:
-        if text == "📊 Admin Stats":
+        if "Admin Stats" in text:
             await admin_stats(update, context)
             return
-        elif text == "💸 Pending Withdrawals":
+        elif "Pending Withdrawals" in text:
             await admin_pending_withdrawals(update, context)
             return
-        elif text == "👥 All Users":
+        elif "All Users" in text:
             await admin_all_users(update, context)
             return
-        elif text == "🔓 Unlock User":
+        elif "Unlock User" in text:
             context.user_data["waiting_for_unlock"] = True
             await update.message.reply_text("Send the User ID you want to unlock:")
             return
-        elif text == "📢 Broadcast":
+        elif "Broadcast" in text:
             context.user_data["waiting_for_broadcast"] = True
             await update.message.reply_text("Send the message you want to broadcast to all users:")
             return
-        elif text == "💳 Pending Payments":
+        elif "Pending Payments" in text:
             await admin_pending_payments(update, context)
             return
-        elif text == "⬅️ Back to User Menu":
+        elif "Back to User Menu" in text:
             await update.message.reply_text("Back to normal menu.", reply_markup=full_menu_keyboard())
             return
 
@@ -896,15 +896,33 @@ async def admin_all_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
-    c.execute("SELECT user_id, username, balance, has_paid_entry FROM users ORDER BY balance DESC LIMIT 30")
-    rows = c.fetchall()
+    try:
+        c.execute("SELECT user_id, username, balance, has_paid_entry FROM users ORDER BY balance DESC LIMIT 30")
+        rows = c.fetchall()
 
-    text = "👥 **Top Users (by balance)**\n\n"
-    for r in rows:
-        status = "✅" if r[3] == 1 else "❌"
-        text += f"{status} `{r[0]}` | @{r[1] or 'N/A'} | ₦{r[2]:,.2f}\n"
+        if not rows:
+            await update.message.reply_text("No users found in the database.", reply_markup=admin_keyboard())
+            return
 
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=admin_keyboard())
+        text = "👥 Top Users (by balance)\n\n"
+        for r in rows:
+            status = "✅" if r[3] == 1 else "❌"
+            username = r[1] if r[1] else "N/A"
+            # Avoid Markdown issues with special characters in usernames
+            text += f"{status} {r[0]} | @{username} | ₦{r[2]:,.2f}\n"
+
+        # Split if message is too long (Telegram limit ~4096)
+        if len(text) > 4000:
+            # Send in chunks
+            chunks = [text[i:i+4000] for i in range(0, len(text), 4000)]
+            for i, chunk in enumerate(chunks):
+                await update.message.reply_text(chunk, reply_markup=admin_keyboard() if i == len(chunks)-1 else None)
+        else:
+            await update.message.reply_text(text, reply_markup=admin_keyboard())
+
+    except Exception as e:
+        logging.error(f"admin_all_users error: {e}")
+        await update.message.reply_text(f"❌ Error loading users: {e}", reply_markup=admin_keyboard())
 
 async def admin_pending_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
