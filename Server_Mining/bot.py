@@ -654,7 +654,7 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Referral earning can be with instantly the user sign up.\n\n"
 
         "📜 *Rules*\n"
-        "• Payments are verified by the admin before activation.\n"
+        "• Payments are verified by the secured platform paystack before activation.\n"
         "• Do not use multiple accounts.\n"
         "• Fake payment proofs will result in a permanent ban.\n"
         "• Be respectful when contacting support.\n"
