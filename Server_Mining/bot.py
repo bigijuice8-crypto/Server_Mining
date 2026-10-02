@@ -642,7 +642,6 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Welcome to *Server Mining*, a online mining platform where you build your own mining business and earn daily real withdrawable income.\n\n"
 
         "🚀 *How It Works*\n"
-        "• Pay the one-time ₦1,000 entry fee.\n"
         "• Purchase mining servers from the Server Store.\n"
         "• Each miner generates daily income.\n"
         "• Claim your mining rewards every 24 hours.\n"
