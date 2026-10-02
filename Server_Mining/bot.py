@@ -647,7 +647,7 @@ async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Claim your mining rewards every 24 hours.\n"
         "• Withdraw your available balance once you meet the withdrawal requirements.\n\n"
         "• All mining will be done on our backend with power computing power to maximise earning depending on the server purchased.\n\n"
-        "• All pay out will be on the 30th and 31th of each to ensure flexibility.\n\n"
+        "• All pay out will be on the 30th and 31th of each month to ensure flexibility.\n\n"
 
         "👥 *Referral Program*\n"
         "Invite friends using your referral link and earn a ₦1,000 referral bonus when they join.\n\n"
